@@ -129,36 +129,12 @@ module Crowbar
             "crowbar.service"
           )
         end
-      end
 
-      get "/" do
-        haml :index
-      end
+        def crowbar_status
+          uri = URI.parse(
+            status_url
+          )
 
-      post "/init" do
-        cleanup_db
-        crowbar_service(:start)
-        symlink_apache_to(:rails)
-        reload_apache
-
-        redirect "/"
-      end
-
-      post "/reset" do
-        crowbar_service(:stop)
-        cleanup_db
-        symlink_apache_to(:sinatra)
-        reload_apache
-
-        redirect "/"
-      end
-
-      get "/status" do
-        uri = URI.parse(
-          status_url
-        )
-
-        result = begin
           res = Net::HTTP.new(
             uri.host,
             uri.port
@@ -178,8 +154,35 @@ module Crowbar
             body: nil
           }
         end
+      end
 
-        json result
+      get "/" do
+        haml :index
+      end
+
+      post "/init" do
+        cleanup_db
+        crowbar_service(:start)
+        symlink_apache_to(:rails)
+        reload_apache
+        until crowbar_status[:code] == 200
+          sleep 1
+        end
+
+        redirect "/installer/installer"
+      end
+
+      post "/reset" do
+        crowbar_service(:stop)
+        cleanup_db
+        symlink_apache_to(:sinatra)
+        reload_apache
+
+        redirect "/"
+      end
+
+      get "/status" do
+        json crowbar_status
       end
 
       get "/assets/*" do
