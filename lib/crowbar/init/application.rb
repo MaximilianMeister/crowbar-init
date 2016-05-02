@@ -75,8 +75,12 @@ module Crowbar
       helpers do
         include Sprockets::Helpers
 
+        def installer_url
+          "http://localhost:3000/installer/installer"
+        end
+
         def status_url
-          "http://localhost:3000/installer/installer/status.json"
+          "#{installer_url}/status.json"
         end
 
         def symlink_apache_to(name)
@@ -130,10 +134,12 @@ module Crowbar
           )
         end
 
-        def crowbar_status
-          uri = URI.parse(
-            status_url
-          )
+        def crowbar_status(request_type = :html)
+          uri = if request_type == :html
+            URI.parse(installer_url)
+          else
+            URI.parse(status_url)
+          end
 
           res = Net::HTTP.new(
             uri.host,
@@ -144,15 +150,27 @@ module Crowbar
             )
           )
 
+          body = if request_type == :html
+            res.body
+          else
+            JSON.parse(res.body)
+          end
+
           {
             code: res.code,
-            body: JSON.parse(res.body)
+            body: body
           }
         rescue
           {
             code: 500,
             body: nil
           }
+        end
+
+        def wait_for_crowbar
+          until crowbar_status[:body].grep /installer-installers/
+            sleep 1
+          end
         end
       end
 
@@ -165,9 +183,7 @@ module Crowbar
         crowbar_service(:start)
         symlink_apache_to(:rails)
         reload_apache
-        until crowbar_status[:code] == 200
-          sleep 1
-        end
+        wait_for_crowbar
 
         redirect "/installer/installer"
       end
